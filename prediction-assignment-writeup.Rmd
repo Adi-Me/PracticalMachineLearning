@@ -1,0 +1,81 @@
+---
+title: "Prediction Assignment Writeup"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+library(knitr)
+```
+
+This analysis will invetsigate data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different way and the goal of this project is to build a model that will predict the manner in which they did the exercise.
+
+## Loading Data
+
+```{r loading}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "pml-training.csv", method = "curl")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = "pml-testing.csv", method = "curl")
+trainingData <- read.csv("pml-training.csv", na.strings=c("NA",""))
+testingData <- read.csv("pml-testing.csv", na.strings=c("NA",""))
+library(caret)
+library(randomForest)
+set.seed(12345)
+```
+
+## Exploratory Analysis
+
+```{r exploratory}
+dim(trainingData)
+summary(trainingData$classe)
+```
+
+Every record in the training set contains 159 parameters and a class (A through E, appear in the *classe* variable).
+
+## Excluding Missing Values
+
+The original data contains a lot of missing values. Only 58 variables doesn't contain NA values in all training and testing records. I chose to use only full variables in my analysis and remove the X variable (record number). The new datasets contains only these variables (and the *classe* variable in the training records).
+
+```{r NA}
+trainVar <- names(trainingData)[!apply(trainingData, 2, anyNA)]
+testVar <- names(testingData)[!apply(testingData, 2, anyNA)]
+noNA <- intersect(trainVar[-1], testVar[-1])
+fullTraining <- trainingData[, c(noNA, "classe")]
+fullTesting <- testingData[, noNA]
+levels(fullTesting$cvtd_timestamp) <- levels(fullTraining$cvtd_timestamp)
+levels(fullTesting$new_window) <- levels(fullTraining$new_window)
+levels(fullTesting$user_name) <- levels(fullTraining$user_name)
+```
+
+## Splitting Data
+
+In order to be able to evaluate the model correctly, I will split the training records into two datasets, one contains 75% of the original training set and will be used for training, and the other contains the remaining 25% and will be used for validating.
+
+```{r splitting}
+trainSet <- createDataPartition(y = fullTraining$classe, p = .75, list = FALSE)
+training <- fullTraining[trainSet,]
+validation <- fullTraining[-trainSet,]
+```
+
+# Modeling, Predicting and Evaluating the Model
+
+I chose to use the Random Forest method to build my model. This method use decision trees in order to predict the class.
+I will build the model based on the training set and test it by predicting the class of the validation set and comparing the predicion to the actual value of the records. 
+
+```{r modeling}
+model <- randomForest(classe ~ ., data = training, ntrees = 1000)
+pred <- predict(model, validation[-60])
+CM <- confusionMatrix(pred, validation$classe)
+print(CM)
+error <- 1-CM$overall['Accuracy']
+```
+
+By comparing the validation records' predicted class to their actual one we can see that the accuracy of the model for out of sample records is very good and expect the out of sample error to be `r error`
+
+## Testing
+
+At last, I will predict the category of each of the 20 testing sets using the model.
+
+```{r test}
+test <- predict(model, fullTesting)
+print(test)
+```
